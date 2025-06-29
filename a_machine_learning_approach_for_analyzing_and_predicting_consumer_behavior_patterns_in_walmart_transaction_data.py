@@ -1,165 +1,91 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import seaborn as sns
+import pickle
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
-from sklearn.cluster import KMeans
+# Load model, scaler, and features
+with open("model.pkl", "rb") as f:
+    model = pickle.load(f)
 
-# Streamlit config
-st.set_page_config(page_title="Walmart Consumer Behavior", layout="wide")
-st.title("🛍️ Walmart Customer Behavior Analysis and Prediction")
+with open("scaler.pkl", "rb") as f:
+    scaler = pickle.load(f)
 
-# Custom CSS styling (soft pink theme)
+with open("features.pkl", "rb") as f:
+    features = pickle.load(f)
+
+# Custom CSS
+st.set_page_config(page_title="Walmart Behavior App", layout="wide")
 st.markdown("""
     <style>
         body {
             background-color: #fff0f5;
         }
-
-        h1, h2, h3, h4 {
+        h1, h2, h3 {
             color: #d63384;
         }
-
-        .stDataFrame {
-            border: 1px solid #f8d7da;
-            border-radius: 10px;
-            padding: 10px;
+        .stButton>button {
+            background-color: #d63384;
+            color: white;
         }
-
-        .stAlert > div {
-            background-color: #f8d7da;
-            color: #842029;
-        }
-
-        .block-container {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-        }
-
-        html, body, [class*="css"]  {
-            font-family: 'Segoe UI', sans-serif;
-        }
-
-        .stFileUploader label {
-            color: #d63384;
-            font-weight: bold;
-        }
-
         .css-1d391kg {
             background-color: #ffe6f0;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# Upload CSV
-uploaded_file = st.file_uploader("📁 Upload your Walmart CSV file", type="csv")
+st.title("💖 Walmart Customer Prediction & Segmentation")
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.success("✅ Data uploaded successfully!")
+# Input options
+mode = st.radio("Select Input Mode:", ["Upload CSV", "Manual Input"])
 
-    st.subheader("📊 Sample Data")
-    st.dataframe(df.head())
+if mode == "Upload CSV":
+    uploaded_file = st.file_uploader("📁 Upload your Walmart CSV file", type="csv")
 
-    # Preprocessing
-    df = df.dropna()
-    le = LabelEncoder()
-    categorical_cols = ['Gender', 'City', 'Category', 'Payment_Method', 'Discount_Applied', 'Repeat_Customer']
-    for col in categorical_cols:
-        df[col] = le.fit_transform(df[col])
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.success("✅ File uploaded successfully!")
+        st.dataframe(df.head())
 
-    # ==========================
-    # 📈 Predictive Modelling
-    # ==========================
-    st.header("📈 Predict Purchase Amount")
+        try:
+            df = df[features]
+            df_scaled = scaler.transform(df)
+            predictions = model.predict(df_scaled)
+            df["Predicted_Purchase"] = predictions
+            st.subheader("📈 Prediction Results")
+            st.dataframe(df[["Predicted_Purchase"]])
+        except Exception as e:
+            st.error(f"🚨 Error during prediction: {e}")
 
-    X = df[['Gender', 'Age', 'City', 'Category', 'Payment_Method', 'Discount_Applied', 'Rating', 'Repeat_Customer']]
-    y = df['Purchase_Amount']
+elif mode == "Manual Input":
+    st.subheader("📝 Manual Input Form")
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    gender = st.selectbox("Gender", ["Male", "Female"])
+    age = st.slider("Age", 18, 80, 25)
+    city = st.selectbox("City", ["New York", "Los Angeles", "Chicago"])
+    category = st.selectbox("Category", ["Electronics", "Clothing", "Groceries"])
+    payment = st.selectbox("Payment Method", ["Credit Card", "Debit Card", "Cash"])
+    discount = st.selectbox("Discount Applied", ["Yes", "No"])
+    rating = st.slider("Rating", 1, 5, 3)
+    repeat = st.selectbox("Repeat Customer", ["Yes", "No"])
 
-    model_rf = RandomForestRegressor(random_state=42)
-    model_rf.fit(X_train, y_train)
-    rf_preds = model_rf.predict(X_test)
-    rf_rmse = np.sqrt(mean_squared_error(y_test, rf_preds))
+    # Encode manual input
+    input_dict = {
+        "Gender": 1 if gender == "Male" else 0,
+        "Age": age,
+        "City": {"New York": 0, "Los Angeles": 1, "Chicago": 2}[city],
+        "Category": {"Electronics": 0, "Clothing": 1, "Groceries": 2}[category],
+        "Payment_Method": {"Credit Card": 0, "Debit Card": 1, "Cash": 2}[payment],
+        "Discount_Applied": 1 if discount == "Yes" else 0,
+        "Rating": rating,
+        "Repeat_Customer": 1 if repeat == "Yes" else 0
+    }
 
-    model_lr = LinearRegression()
-    model_lr.fit(X_train, y_train)
-    lr_preds = model_lr.predict(X_test)
-    lr_rmse = np.sqrt(mean_squared_error(y_test, lr_preds))
+    input_df = pd.DataFrame([input_dict])
+    input_scaled = scaler.transform(input_df)
 
-    st.write(f"🌲 **Random Forest RMSE**: {rf_rmse:.2f}")
-    st.write(f"📉 **Linear Regression RMSE**: {lr_rmse:.2f}")
+    if st.button("Predict"):
+        result = model.predict(input_scaled)[0]
+        st.success(f"🎯 Predicted Purchase Amount: **${result:.2f}**")
 
-    # Visual: Actual vs Predicted
-    st.subheader("🎯 Actual vs Predicted (Random Forest)")
-    fig1, ax1 = plt.subplots()
-    ax1.hexbin(y_test, rf_preds, gridsize=40, cmap='PuRd', bins='log')
-    ax1.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
-    ax1.set_xlabel("Actual")
-    ax1.set_ylabel("Predicted")
-    ax1.set_title("Hexbin Plot: Actual vs Predicted")
-    st.pyplot(fig1)
-
-    # Feature Importance
-    st.subheader("🔍 Feature Importance")
-    importances = model_rf.feature_importances_
-    feature_df = pd.DataFrame({'Feature': X.columns, 'Importance': importances}).sort_values(by='Importance', ascending=True)
-    fig2, ax2 = plt.subplots()
-    sns.barplot(data=feature_df, x='Importance', y='Feature', palette='pink', ax=ax2)
-    st.pyplot(fig2)
-
-    # Heatmap
-    st.subheader("💖 Correlation Matrix")
-    fig3, ax3 = plt.subplots(figsize=(10, 8))
-    sns.heatmap(df.corr(numeric_only=True), annot=True, cmap='pink', fmt=".2f", ax=ax3)
-    st.pyplot(fig3)
-
-    # ==========================
-    # 🧠 Customer Segmentation
-    # ==========================
-    st.header("🧠 Customer Segmentation (K-Means)")
-
-    cluster_df = df.groupby("Customer_ID").agg({
-        "Purchase_Amount": "sum",
-        "Age": "mean"
-    }).reset_index()
-
-    scaler = StandardScaler()
-    scaled_features = scaler.fit_transform(cluster_df[['Purchase_Amount', 'Age']])
-    kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-    cluster_df['Cluster'] = kmeans.fit_predict(scaled_features)
-
-    st.write("📋 **Cluster Summary**")
-    summary = cluster_df.groupby('Cluster').agg({
-        'Purchase_Amount': ['mean', 'min', 'max'],
-        'Age': ['mean', 'min', 'max'],
-        'Customer_ID': 'count'
-    })
-    summary.columns = ['_'.join(col) for col in summary.columns]
-    st.dataframe(summary)
-
-    # Scatter plot
-    st.subheader("📌 Cluster Visualization")
-    fig4, ax4 = plt.subplots()
-    sns.scatterplot(data=cluster_df, x='Age', y='Purchase_Amount', hue='Cluster', palette='pastel', ax=ax4)
-    st.pyplot(fig4)
-
-    # Centroids
-    st.subheader("💎 Cluster Centroids")
-    centroids = scaler.inverse_transform(kmeans.cluster_centers_)
-    fig5, ax5 = plt.subplots()
-    sns.scatterplot(data=cluster_df, x='Purchase_Amount', y='Age', hue='Cluster', palette='pastel', alpha=0.6, ax=ax5)
-    ax5.scatter(centroids[:, 0], centroids[:, 1], s=200, c='black', marker='X', label='Centroids')
-    ax5.legend()
-    ax5.set_title("K-Means Clustering with Centroids")
-    st.pyplot(fig5)
-
-else:
-    st.warning("Please upload a dataset to continue.")
