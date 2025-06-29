@@ -1,92 +1,123 @@
+# Walmart Customer Behavior Streamlit App - Lengkap
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import pickle
-from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-# Load Model, Scaler, dan Fitur
+# Load model dan scaler
 with open("model.pkl", "rb") as f:
     model = pickle.load(f)
+
 with open("scaler.pkl", "rb") as f:
     scaler = pickle.load(f)
+
 with open("features.pkl", "rb") as f:
-    features = pickle.load(f)
+    feature_cols = pickle.load(f)
 
-# Setup Streamlit
-st.set_page_config(page_title="Walmart Purchase Predictor", layout="wide")
-st.title("🛒 Walmart Customer Behavior Prediction")
+# Streamlit config
+st.set_page_config(page_title="Walmart Analysis", layout="wide")
+st.title("🛍️ Walmart Customer Behavior Analysis and Prediction")
 
-# Tab navigasi
-tab1, tab2 = st.tabs(["📁 Upload CSV", "🧾 Input Manual"])
+# Tabs
+tab1, tab2 = st.tabs(["📁 Upload Dataset", "📝 Input Manual"])
 
-# ============================
-# Tab 1: Upload CSV
-# ============================
+# ======================
+# 📁 Upload CSV
+# ======================
 with tab1:
-    uploaded_file = st.file_uploader("Upload CSV File", type="csv")
+    uploaded_file = st.file_uploader("Upload your Walmart CSV file", type="csv")
 
-    if uploaded_file:
+    if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
-        st.success("✅ Dataset loaded!")
-
-        st.write("📊 Sample Data")
+        st.success("✅ File berhasil diupload")
         st.dataframe(df.head())
 
-        # Drop NA dan encode jika perlu
+        # Preprocessing
         df = df.dropna()
         for col in ['Gender', 'City', 'Category', 'Payment_Method', 'Discount_Applied', 'Repeat_Customer']:
-            if df[col].dtype == 'object':
-                df[col] = pd.factorize(df[col])[0]
+            le = LabelEncoder()
+            df[col] = le.fit_transform(df[col])
 
-        # Prediksi
-        X = df[features]
+        # Prediction
+        X = df[feature_cols]
         X_scaled = scaler.transform(X)
-        df['Predicted_Purchase'] = model.predict(X_scaled)
+        df['Predicted_Purchase_Amount'] = model.predict(X_scaled)
 
-        st.subheader("🎯 Prediction Result")
-        st.dataframe(df[['Customer_ID'] + features + ['Predicted_Purchase']])
+        st.subheader("📊 Hasil Prediksi")
+        st.dataframe(df[['Customer_ID', 'Predicted_Purchase_Amount']].head())
+
+        # Visualisasi Actual vs Predicted jika kolom asli ada
+        if 'Purchase_Amount' in df.columns:
+            st.subheader("🎯 Actual vs Predicted")
+            fig1, ax1 = plt.subplots()
+            ax1.scatter(df['Purchase_Amount'], df['Predicted_Purchase_Amount'], alpha=0.5, color='deeppink')
+            ax1.plot([df['Purchase_Amount'].min(), df['Purchase_Amount'].max()],
+                     [df['Purchase_Amount'].min(), df['Purchase_Amount'].max()], 'r--')
+            ax1.set_xlabel("Actual")
+            ax1.set_ylabel("Predicted")
+            st.pyplot(fig1)
+
+        # Heatmap korelasi
+        st.subheader("💖 Correlation Matrix")
+        fig2, ax2 = plt.subplots(figsize=(8,6))
+        sns.heatmap(df.corr(numeric_only=True), annot=True, cmap="pink", fmt=".2f", ax=ax2)
+        st.pyplot(fig2)
 
         # Clustering
         st.subheader("🧠 Customer Segmentation")
-        cluster_data = df[['Customer_ID', 'Predicted_Purchase', 'Age']].copy()
+        cluster_df = df.groupby("Customer_ID").agg({"Predicted_Purchase_Amount":"sum", "Age":"mean"}).reset_index()
+        cluster_scaled = StandardScaler().fit_transform(cluster_df[['Predicted_Purchase_Amount', 'Age']])
         kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-        cluster_scaled = scaler.fit_transform(cluster_data[['Predicted_Purchase', 'Age']])
-        cluster_data['Cluster'] = kmeans.fit_predict(cluster_scaled)
+        cluster_df['Cluster'] = kmeans.fit_predict(cluster_scaled)
 
-        st.dataframe(cluster_data)
+        fig3, ax3 = plt.subplots()
+        sns.scatterplot(data=cluster_df, x='Age', y='Predicted_Purchase_Amount', hue='Cluster', palette='pastel', ax=ax3)
+        st.pyplot(fig3)
 
-# ============================
-# Tab 2: Input Manual
-# ============================
+        st.write("📌 Centroid Location")
+        centroids = StandardScaler().fit(cluster_df[['Predicted_Purchase_Amount','Age']]).inverse_transform(kmeans.cluster_centers_)
+        st.dataframe(pd.DataFrame(centroids, columns=['Predicted_Purchase_Amount', 'Age']))
+
+# ======================
+# 📝 Input Manual
+# ======================
 with tab2:
-    st.write("Isi form berikut untuk prediksi individual")
+    st.subheader("Masukkan Data Customer")
+    form = st.form("manual_input")
+    gender = form.selectbox("Gender", ['Male', 'Female'])
+    age = form.slider("Age", 18, 70, 25)
+    city = form.selectbox("City", ['New York', 'Los Angeles', 'Chicago'])
+    category = form.selectbox("Category", ['Electronics', 'Clothing', 'Grocery'])
+    payment_method = form.selectbox("Payment Method", ['Credit Card', 'Cash', 'Online'])
+    discount = form.selectbox("Discount Applied", ['Yes', 'No'])
+    rating = form.slider("Rating", 1.0, 5.0, 3.0)
+    repeat_customer = form.selectbox("Repeat Customer", ['Yes', 'No'])
 
-    input_data = {}
-    input_data['Gender'] = st.selectbox("Gender", ["Male", "Female"])
-    input_data['Age'] = st.slider("Age", 18, 65, 30)
-    input_data['City'] = st.selectbox("City", ["Urban", "Suburban", "Rural"])
-    input_data['Category'] = st.selectbox("Category", ["Electronics", "Clothing", "Grocery"])
-    input_data['Payment_Method'] = st.selectbox("Payment Method", ["Credit Card", "Cash", "E-wallet"])
-    input_data['Discount_Applied'] = st.selectbox("Discount Applied", ["Yes", "No"])
-    input_data['Rating'] = st.slider("Rating", 1, 5, 3)
-    input_data['Repeat_Customer'] = st.selectbox("Repeat Customer", ["Yes", "No"])
+    submitted = form.form_submit_button("Predict")
 
-    if st.button("🔮 Predict"):
-        # Encode manual input
-        map_dict = {
-            'Gender': {"Male": 1, "Female": 0},
-            'City': {"Urban": 0, "Suburban": 1, "Rural": 2},
-            'Category': {"Electronics": 0, "Clothing": 1, "Grocery": 2},
-            'Payment_Method': {"Credit Card": 0, "Cash": 1, "E-wallet": 2},
-            'Discount_Applied': {"Yes": 1, "No": 0},
-            'Repeat_Customer': {"Yes": 1, "No": 0}
-        }
+    if submitted:
+        manual_df = pd.DataFrame([{
+            'Gender': gender,
+            'Age': age,
+            'City': city,
+            'Category': category,
+            'Payment_Method': payment_method,
+            'Discount_Applied': discount,
+            'Rating': rating,
+            'Repeat_Customer': repeat_customer
+        }])
 
-        for col in map_dict:
-            input_data[col] = map_dict[col][input_data[col]]
+        # Encoding manual
+        for col in ['Gender', 'City', 'Category', 'Payment_Method', 'Discount_Applied', 'Repeat_Customer']:
+            le = LabelEncoder()
+            manual_df[col] = le.fit_transform(manual_df[col])
 
-        input_df = pd.DataFrame([input_data])
-        input_scaled = scaler.transform(input_df[features])
-        prediction = model.predict(input_scaled)[0]
-        st.success(f"💰 Predicted Purchase Amount: **${prediction:,.2f}**")
+        X_manual = manual_df[feature_cols]
+        X_manual_scaled = scaler.transform(X_manual)
+        pred = model.predict(X_manual_scaled)[0]
+
+        st.success(f"🎉 Predicted Purchase Amount: ${pred:,.2f}")
