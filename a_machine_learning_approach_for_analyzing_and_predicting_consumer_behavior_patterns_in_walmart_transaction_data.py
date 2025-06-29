@@ -13,7 +13,49 @@ from sklearn.cluster import KMeans
 
 # Streamlit config
 st.set_page_config(page_title="Walmart Consumer Behavior", layout="wide")
-st.title("🛒 Walmart Customer Behavior Analysis and Prediction")
+st.title("🛍️ Walmart Customer Behavior Analysis and Prediction")
+
+# Custom CSS styling (soft pink theme)
+st.markdown("""
+    <style>
+        body {
+            background-color: #fff0f5;
+        }
+
+        h1, h2, h3, h4 {
+            color: #d63384;
+        }
+
+        .stDataFrame {
+            border: 1px solid #f8d7da;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .stAlert > div {
+            background-color: #f8d7da;
+            color: #842029;
+        }
+
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+
+        html, body, [class*="css"]  {
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        .stFileUploader label {
+            color: #d63384;
+            font-weight: bold;
+        }
+
+        .css-1d391kg {
+            background-color: #ffe6f0;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # Upload CSV
 uploaded_file = st.file_uploader("📁 Upload your Walmart CSV file", type="csv")
@@ -52,13 +94,13 @@ if uploaded_file is not None:
     lr_preds = model_lr.predict(X_test)
     lr_rmse = np.sqrt(mean_squared_error(y_test, lr_preds))
 
-    st.write(f"📊 **Random Forest RMSE**: {rf_rmse:.2f}")
+    st.write(f"🌲 **Random Forest RMSE**: {rf_rmse:.2f}")
     st.write(f"📉 **Linear Regression RMSE**: {lr_rmse:.2f}")
 
     # Visual: Actual vs Predicted
     st.subheader("🎯 Actual vs Predicted (Random Forest)")
     fig1, ax1 = plt.subplots()
-    ax1.hexbin(y_test, rf_preds, gridsize=40, cmap='Blues', bins='log')
+    ax1.hexbin(y_test, rf_preds, gridsize=40, cmap='PuRd', bins='log')
     ax1.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
     ax1.set_xlabel("Actual")
     ax1.set_ylabel("Predicted")
@@ -70,13 +112,13 @@ if uploaded_file is not None:
     importances = model_rf.feature_importances_
     feature_df = pd.DataFrame({'Feature': X.columns, 'Importance': importances}).sort_values(by='Importance', ascending=True)
     fig2, ax2 = plt.subplots()
-    sns.barplot(data=feature_df, x='Importance', y='Feature', palette='Blues_d', ax=ax2)
+    sns.barplot(data=feature_df, x='Importance', y='Feature', palette='pink', ax=ax2)
     st.pyplot(fig2)
 
     # Heatmap
-    st.subheader("🔗 Correlation Matrix")
+    st.subheader("💖 Correlation Matrix")
     fig3, ax3 = plt.subplots(figsize=(10, 8))
-    sns.heatmap(df.corr(numeric_only=True), annot=True, cmap='coolwarm', fmt=".2f", ax=ax3)
+    sns.heatmap(df.corr(numeric_only=True), annot=True, cmap='pink', fmt=".2f", ax=ax3)
     st.pyplot(fig3)
 
     # ==========================
@@ -105,15 +147,15 @@ if uploaded_file is not None:
 
     # Scatter plot
     st.subheader("📌 Cluster Visualization")
-
     fig4, ax4 = plt.subplots()
-    sns.scatterplot(data=cluster_df, x='Age', y='Purchase_Amount', hue='Cluster', palette='Set2', ax=ax4)
+    sns.scatterplot(data=cluster_df, x='Age', y='Purchase_Amount', hue='Cluster', palette='pastel', ax=ax4)
     st.pyplot(fig4)
 
     # Centroids
+    st.subheader("💎 Cluster Centroids")
     centroids = scaler.inverse_transform(kmeans.cluster_centers_)
     fig5, ax5 = plt.subplots()
-    sns.scatterplot(data=cluster_df, x='Purchase_Amount', y='Age', hue='Cluster', palette='Set2', alpha=0.6, ax=ax5)
+    sns.scatterplot(data=cluster_df, x='Purchase_Amount', y='Age', hue='Cluster', palette='pastel', alpha=0.6, ax=ax5)
     ax5.scatter(centroids[:, 0], centroids[:, 1], s=200, c='black', marker='X', label='Centroids')
     ax5.legend()
     ax5.set_title("K-Means Clustering with Centroids")
